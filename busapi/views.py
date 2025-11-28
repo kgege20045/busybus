@@ -16,8 +16,8 @@ def run_training(request):
 
 def predict_seat(request):
     # 1) 프론트에서 보내줄 쿼리 파라미터 받기
-    routeId = request.GET.get('routeId')
-    time = request.GET.get('time')
+    routeid = request.GET.get('routeid')
+    select_time = request.GET.get('select_time')
 
     # 2) 간단한 유효성 검사 (없으면 에러 반환)
     if not routeId or not time:
