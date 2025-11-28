@@ -3,6 +3,7 @@ from django.http import JsonResponse
 import pandas as pd
 from .models import bus_arrival_past
 from .ml_train import train_model_and_save
+from .ml_predict import predict_remaining_seats
 
 def train_from_db():
     # db(bus_arrival_past)에서 훈련 데이터를 가져와 학습함수에 전달
@@ -20,21 +21,31 @@ def predict_seat(request):
     select_time = request.GET.get('select_time')
 
     # 2) 간단한 유효성 검사 (없으면 에러 반환)
-    if not routeId or not time:
+    if not routeid or not select_time:
         return JsonResponse(
             {"ok": False, "error": "route, stationId, time 파라미터가 필요합니다."},
             status=400,
         )
+    try:
+        routeid_int = int(routeid)
+        select_time_int = int(select_time)
+    except ValueError:
+        return JsonResponse(
+            {"ok": False, "error": "routeId와 select_time은 정수여야 합니다."},
+            status=400,
+        )
 
-    # TODO: 나중에 여기서 DB 조회 + XGBoost 예측 넣기
-    # 지금은 일단 가짜 숫자
-    predicted = 5
+    # 3) 예측
+    try:
+        pred = predict_remaining_seats(routeid_int, routeid_int)
+    except Exception as e:
+        return JsonResponse(
+            {"ok": False, "error": f"prediction error: {e}"},
+            status=500,
+        )
+
 
     data = {
-        "ok": True,
-        "route": routeId,
-        "stationId": int(stationId),
-        "time": time,
-        "predicted_remaining_seats": predicted,
+
     }
     return JsonResponse(data)
