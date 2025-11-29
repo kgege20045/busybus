@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@react-native/new-app-screen": "0.82.1",
+    "axios": "^1.13.2",
     "react": "19.1.1",
     "react-native": "0.82.1",
     "react-native-linear-gradient": "^2.8.3",
@@ -28,6 +29,7 @@
     "@react-native/eslint-config": "0.82.1",
     "@react-native/metro-config": "0.82.1",
     "@react-native/typescript-config": "0.82.1",
+    "@types/axios": "^0.9.36",
     "@types/jest": "^29.5.13",
     "@types/react": "^19.1.1",
     "@types/react-native-linear-gradient": "^2.3.1",

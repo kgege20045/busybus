@@ -12,6 +12,11 @@ import {
 } from "../store/savedRoutesStore";
 import { getRouteSelection, RouteSelection, subscribeRouteSelection } from "../store/routeSelectionStore";
 import { setSearchIntent } from "../store/searchIntentStore";
+import {
+  getBusesAtStation,
+  getStationIdByName,
+  findStationInRoute,
+} from "../data";
 
 const COLOR = {
   bg: "#F7F7F6",
@@ -42,6 +47,22 @@ const ICONS = {
   marked: require("../../assets/images/home/marked.png"),
 };
 
+/**
+ * 하단 버스 카드에 표시할 경로 요약 정보 타입
+ */
+type RouteSummary = {
+  from_label: string;
+  to_label: string;
+  bus_numbers_text: string;
+  duration_text: string;
+};
+
+/**
+ * 정류장당 평균 소요 시간(분)
+ * - 실제 실시간 데이터가 없으므로, 정류장 개수에 비례한 대략적인 시간을 계산할 때 사용합니다.
+ */
+const AVERAGE_MIN_PER_STOP = 4;
+
 type HomeProps = {
   currentScreen: ScreenName;
   onNavigate: NavigateHandler;
@@ -66,6 +87,77 @@ const Home = ({ currentScreen, onNavigate }: HomeProps): ReactElement => {
     const unsubscribe = subscribeRouteSelection(setRouteSelection);
     return unsubscribe;
   }, []);
+
+  /**
+   * 현재 선택된 출발/도착지에 맞는 버스 번호와 소요 시간 계산
+   * - 로컬 정적 데이터(routes.json, stationBus.json)를 기반으로 추정합니다.
+   * - 출발/도착지가 변경될 때마다 자동으로 재계산됩니다.
+   */
+  const routeSummary: RouteSummary = useMemo(() => {
+    const origin_name = routeSelection.origin.title;
+    const dest_name = routeSelection.destination.title;
+
+    // 항상 현재 선택된 출발/도착 이름을 라벨로 사용
+    const from_label = origin_name;
+    const to_label = dest_name;
+
+    // 기본 표시 값 (데이터를 찾지 못한 경우를 대비한 안전 장치)
+    let bus_numbers_text = "3302";
+    let duration_text = "32분 소요";
+
+    // 1. 정류장 이름으로 stationId 조회
+    const origin_id = getStationIdByName(origin_name);
+    const dest_id = getStationIdByName(dest_name);
+
+    if (!origin_id || !dest_id) {
+      // 정류장 ID를 찾을 수 없는 경우, 기본 값 유지
+      return { from_label, to_label, bus_numbers_text, duration_text };
+    }
+
+    // 2. 두 정류장을 지나는 버스 번호 목록 계산 (교집합)
+    const origin_buses = getBusesAtStation(origin_id);
+    const dest_buses = getBusesAtStation(dest_id);
+    const common_buses = origin_buses.filter((bus) => dest_buses.includes(bus));
+
+    if (common_buses.length === 0) {
+      // 공통으로 지나는 버스가 없는 경우: 출발 정류장을 지나는 첫 번째 버스를 표시
+      if (origin_buses.length > 0) {
+        bus_numbers_text = origin_buses[0];
+        duration_text = "경로 정보 없음";
+      }
+      return { from_label, to_label, bus_numbers_text, duration_text };
+    }
+
+    // 3. 공통 버스 중 첫 번째를 대표 버스로 사용
+    const main_bus = common_buses[0];
+    bus_numbers_text = main_bus;
+
+    // 4. 이 버스 노선에서 출발/도착 정류장의 위치 찾기
+    const origin_pos = findStationInRoute(main_bus, origin_id);
+    const dest_pos = findStationInRoute(main_bus, dest_id);
+
+    if (!origin_pos || !dest_pos) {
+      duration_text = "경로 정보 없음";
+      return { from_label, to_label, bus_numbers_text, duration_text };
+    }
+
+    // 방향이 다르면 단일 노선으로 바로 이동할 수 없다고 판단
+    if (origin_pos.direction !== dest_pos.direction) {
+      duration_text = "환승 필요";
+      return { from_label, to_label, bus_numbers_text, duration_text };
+    }
+
+    // 5. 정류장 순서 차이로 대략적인 소요 시간 계산
+    const stop_diff = Math.abs(dest_pos.order - origin_pos.order);
+    if (stop_diff === 0) {
+      duration_text = "0분 소요";
+    } else {
+      const minutes = stop_diff * AVERAGE_MIN_PER_STOP;
+      duration_text = `약 ${minutes}분 소요`;
+    }
+
+    return { from_label, to_label, bus_numbers_text, duration_text };
+  }, [routeSelection]);
 
   const isRouteBookmarked = useMemo(() => {
     return savedRoutes.some(
@@ -176,16 +268,16 @@ const Home = ({ currentScreen, onNavigate }: HomeProps): ReactElement => {
               <Image source={ICONS.house} style={styles.busIconImage} resizeMode="contain" />
             </View>
             <View style={styles.busBar}>
-              <Text style={styles.busNumberText}>3302</Text>
+              <Text style={styles.busNumberText}>{routeSummary.bus_numbers_text}</Text>
             </View>
             <View style={styles.busCircle}>
               <Image source={ICONS.bus} style={styles.busIconImage} resizeMode="contain" />
             </View>
           </View>
           <View style={styles.busRowBottom}>
-            <Text style={styles.busLabel}>집</Text>
-            <Text style={styles.busTimeLink}>32분 소요</Text>
-            <Text style={styles.busLabel}>양재역</Text>
+            <Text style={styles.busLabel}>{routeSummary.from_label}</Text>
+            <Text style={styles.busTimeLink}>{routeSummary.duration_text}</Text>
+            <Text style={styles.busLabel}>{routeSummary.to_label}</Text>
           </View>
         </View>
 

@@ -11,6 +11,7 @@ import LinearGradient from "react-native-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { NavigateHandler } from "../types/navigation";
 import { login } from "../store/authStore";
+import { login_user } from "../api/auth";
 
 const ICONS = {
   arrowNarrowLeft: require("../../assets/images/signup/arrow-narrow-left.png"),
@@ -30,9 +31,54 @@ const LoginVersion1 = ({ onNavigate }: LoginProps) => {
   const [email, setEmail] = useState("aaaa@gmail.com");
   const [password, setPassword] = useState("*******");
 
-  const handleLogin = () => {
-    login(email, "User");
-    onNavigate("user");
+  // 서버 통신 상태 및 에러 메시지 관리
+  const [is_loading, setIs_loading] = useState(false);
+  const [error_message, setError_message] = useState<string | null>(null);
+
+  /**
+   * 로그인 처리 함수
+   * - 사용자가 입력한 이메일, 비밀번호를 이용해 Django 백엔드에 로그인 요청을 보냅니다.
+   * - 성공 시 전역 auth 상태를 갱신하고 사용자 화면으로 이동합니다.
+   */
+  const handleLogin = async () => {
+    // 1. 기본 입력값 검증
+    if (!email.trim() || !password.trim()) {
+      setError_message("이메일과 비밀번호를 모두 입력해주세요.");
+      return;
+    }
+
+    try {
+      // 2. 로딩 상태 설정 및 이전 에러 메시지 초기화
+      setIs_loading(true);
+      setError_message(null);
+
+      // 3. Django 백엔드에 로그인 요청 전송
+      const auth_response = await login_user(email, password);
+
+      /**
+       * 4. 응답으로 받은 사용자 정보로 전역 인증 상태 갱신
+       * - 현재 authStore의 login 함수는 (email, name) 형태로 가정합니다.
+       * - 백엔드 응답 스키마에 맞추어 email, name을 적절히 매핑해야 합니다.
+       */
+      const auth_user = auth_response.user;
+      login(auth_user.email, auth_user.name);
+
+      // 5. 로그인 성공 시 사용자 화면으로 이동
+      onNavigate("user");
+    } catch (error) {
+      /**
+       * 6. 에러 처리
+       * - 네트워크 오류, 서버 오류, 잘못된 자격 증명 등 다양한 에러가 발생할 수 있습니다.
+       * - 사용자에게는 구체적인 내부 정보를 노출하지 않고 일반적인 안내 문구를 제공합니다.
+       */
+      console.error("로그인 요청 중 오류가 발생했습니다.", error);
+      setError_message(
+        "로그인에 실패했습니다. 이메일과 비밀번호를 확인한 후 다시 시도해주세요.",
+      );
+    } finally {
+      // 7. 로딩 상태 해제
+      setIs_loading(false);
+    }
   };
 
   /**
@@ -142,11 +188,17 @@ const LoginVersion1 = ({ onNavigate }: LoginProps) => {
                 </Text>
               </View>
 
+            {/* 에러 메시지 표시 영역 */}
+            {error_message && (
+              <Text style={styles.errorText}>{error_message}</Text>
+            )}
+
               {/* 로그인 버튼 */}
               <TouchableOpacity
                 style={styles.buttons}
-                activeOpacity={0.8}
-                onPress={handleLogin}
+              activeOpacity={0.8}
+              onPress={handleLogin}
+              disabled={is_loading}
               >
                 <LinearGradient
                   style={styles.button}
@@ -156,7 +208,7 @@ const LoginVersion1 = ({ onNavigate }: LoginProps) => {
                   angle={180}
                 >
                   <Text style={[styles.labelText, styles.labelTextTypo]}>
-                    Log In
+                  {is_loading ? "로그인 중..." : "Log In"}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -365,6 +417,12 @@ const styles = StyleSheet.create({
   labelText: {
     color: "#fff",
     textAlign: "center",
+  },
+  errorText: {
+    marginTop: 4,
+    color: "#ff3b30",
+    fontSize: 12,
+    textAlign: "left",
   },
   signUp: {
     gap: 6,

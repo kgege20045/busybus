@@ -11,6 +11,7 @@ import LinearGradient from "react-native-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { NavigateHandler } from "../types/navigation";
 import { login } from "../store/authStore";
+import { register_user } from "../api/auth";
 
 // 이미지 리소스 import
 const ICONS = {
@@ -35,25 +36,57 @@ const SignUpVersion1 = ({ onNavigate }: SignUpProps) => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  
+
   // 비밀번호 보기/숨기기 상태
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+
+  // 서버 통신 상태 및 에러 메시지 관리
+  const [is_loading, setIs_loading] = useState(false);
+  const [error_message, setError_message] = useState<string | null>(null);
 
   /**
    * 회원가입 처리 함수
    * 입력된 정보를 검증하고 회원가입을 진행합니다.
    */
-  const handleSignUp = () => {
-    // 간단한 유효성 검사
+  const handleSignUp = async () => {
+    // 1. 간단한 유효성 검사
     if (!name.trim() || !email.trim() || !password.trim()) {
-      // TODO: 에러 메시지 표시
+      setError_message("이름, 이메일, 비밀번호를 모두 입력해주세요.");
       return;
     }
 
-    // 회원가입 처리 (현재는 login 함수를 사용하여 로그인 상태로 전환)
-    login(email, name);
-    // 회원가입 후 사용자 화면으로 이동
-    onNavigate("user");
+    try {
+      // 2. 로딩 상태 설정 및 이전 에러 메시지 초기화
+      setIs_loading(true);
+      setError_message(null);
+
+      // 3. Django 백엔드에 회원가입 요청 전송
+      const auth_response = await register_user(name, email, password);
+
+      /**
+       * 4. 응답으로 받은 사용자 정보로 전역 인증 상태 갱신
+       * - 현재 authStore의 login 함수는 (email, name) 형태로 가정합니다.
+       * - 백엔드 응답 스키마에 맞추어 email, name을 적절히 매핑해야 합니다.
+       */
+      const auth_user = auth_response.user;
+      login(auth_user.email, auth_user.name);
+
+      // 5. 회원가입 및 로그인 성공 시 사용자 화면으로 이동
+      onNavigate("user");
+    } catch (error) {
+      /**
+       * 6. 에러 처리
+       * - 네트워크 오류, 서버 오류, 유효성 검사 실패(이메일 중복 등) 상황을 포괄합니다.
+       * - 사용자에게는 일반적인 안내 문구를 제공하고, 구체적인 내부 에러는 콘솔 로그로만 남깁니다.
+       */
+      console.error("회원가입 요청 중 오류가 발생했습니다.", error);
+      setError_message(
+        "회원가입에 실패했습니다. 입력 정보를 확인한 후 다시 시도해주세요.",
+      );
+    } finally {
+      // 7. 로딩 상태 해제
+      setIs_loading(false);
+    }
   };
 
   /**
@@ -187,11 +220,17 @@ const SignUpVersion1 = ({ onNavigate }: SignUpProps) => {
                 </View>
               </View>
 
+              {/* 에러 메시지 표시 영역 */}
+              {error_message && (
+                <Text style={styles.errorText}>{error_message}</Text>
+              )}
+
               {/* 회원가입 버튼 */}
               <TouchableOpacity
                 style={styles.buttons}
                 activeOpacity={0.8}
                 onPress={handleSignUp}
+                disabled={is_loading}
               >
                 <LinearGradient
                   style={styles.button}
@@ -201,7 +240,7 @@ const SignUpVersion1 = ({ onNavigate }: SignUpProps) => {
                   angle={180}
                 >
                   <Text style={[styles.labelText, styles.labelTextTypo]}>
-                    Register
+                    {is_loading ? "회원가입 중..." : "Register"}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -405,6 +444,12 @@ const styles = StyleSheet.create({
   labelText: {
     color: "#fff",
     textAlign: "center",
+  },
+  errorText: {
+    marginTop: 4,
+    color: "#ff3b30",
+    fontSize: 12,
+    textAlign: "left",
   },
   signUp2: {
     gap: 6,
