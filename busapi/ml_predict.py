@@ -6,5 +6,6 @@ from django.conf import settings
 #입력 : routeid, select_time 형태
 
 
-def predict_remaining_seats():
+def predict_remaining_seats(routeid_int, select_time_int):
+    # TODO: 실제 예측 로직 구현
     return []
