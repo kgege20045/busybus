@@ -15,7 +15,6 @@ from sklearn.metrics import mean_squared_error
 
 from .models import bus_arrival_past
 
-
 # ------------------------------------
 # 1. DB에서 로딩 & 기본 전처리
 # ------------------------------------

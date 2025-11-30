@@ -31,16 +31,15 @@ def run_training(request):
 
 
 def predict_seat(request):
-    # 1) 프론트에서 보내줄 쿼리 파라미터 받기
-    routeid = request.GET.get('routeid')
-    select_time = request.GET.get('select_time')
+    routeid = request.GET.get("routeid")
+    select_time = request.GET.get("select_time")
 
-    # 2) 간단한 유효성 검사 (없으면 에러 반환)
     if not routeid or not select_time:
         return JsonResponse(
-            {"ok": False, "error": "route, stationId, time 파라미터가 필요합니다."},
+            {"ok": False, "error": "routeid, select_time 파라미터가 필요합니다."},
             status=400,
         )
+
     try:
         routeid_int = int(routeid)
         select_time_int = int(select_time)
@@ -50,22 +49,23 @@ def predict_seat(request):
             status=400,
         )
 
-    # 3) 예측
     try:
-        predications = predict_remaining_seats(routeid_int, routeid_int)
+        predications = predict_remaining_seats(routeid_int, select_time_int)
     except Exception as e:
         return JsonResponse(
             {"ok": False, "error": f"prediction error: {e}"},
             status=500,
         )
 
-    data = {
-        "routeid": routeid,
-        "select_time": select_time,
-        "predications": predications,  # list 형태
-
-    }
-    return JsonResponse(data, status=200)
+    return JsonResponse(
+        {
+            "ok": True,
+            "routeid": routeid_int,
+            "select_time": select_time_int,
+            "predications": predications,
+        },
+        status=200,
+    )
 
 
 @csrf_exempt
