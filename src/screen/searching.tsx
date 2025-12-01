@@ -109,7 +109,7 @@ const SearchingScreen = ({ currentScreen, onNavigate }: SearchingProps): ReactEl
         type: "bus",
       });
       setBusSearchNumber(trimmedQuery);
-      onNavigate("bus_search_prediction");
+      onNavigate("bus_search");
     } else {
       addSearchHistory({
         title: trimmedQuery,
@@ -140,11 +140,16 @@ const SearchingScreen = ({ currentScreen, onNavigate }: SearchingProps): ReactEl
       return;
     }
 
-    if (isEndpointSelection) {
-      setRouteLocation(currentIntent === "select_origin" ? "origin" : "destination", {
-        title: result.title,
-        description: result.description,
-      });
+    // 출발/도착 선택 모드일 때는 "정류장"만 home으로 되돌아가게 처리
+    // 버스를 선택하는 경우에는 일반 모드와 동일하게 버스 상세 화면으로 이동
+    if (isEndpointSelection && result.type === "station") {
+      setRouteLocation(
+        currentIntent === "select_origin" ? "origin" : "destination",
+        {
+          title: result.title,
+          description: result.description,
+        }
+      );
       setSearchIntent("default");
       onNavigate("home");
       return;
@@ -157,10 +162,11 @@ const SearchingScreen = ({ currentScreen, onNavigate }: SearchingProps): ReactEl
     });
 
     if (result.type === "bus") {
-      // 버스를 선택하면 버스 상세 화면으로 이동
+      // 버스를 선택하면 항상 버스 상세(예측) 화면으로 이동
       setBusSearchNumber(result.title);
-      onNavigate("bus_search_prediction");
+      onNavigate("bus_search");
     } else {
+      // 정류장을 선택하면 정류장 상세 화면으로 이동
       setDepartureStation(result.title);
       onNavigate("station_search");
     }

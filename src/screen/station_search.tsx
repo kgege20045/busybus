@@ -19,6 +19,7 @@ import {
   StationBusInfo,
 } from "../data";
 import { getStationRealtimeData, getBusRealtimeData, BusRealtimeData, getCongestionLevel, predictSeat, PredictSeatResponse } from "../api/bus";
+import { addFavorite, FavoriteItem, getFavorites, removeFavorite, subscribeFavorites } from "../store/favoriteStore";
 
 type CongestionLevel = "empty" | "normal" | "crowded" | "veryCrowded";
 
@@ -39,6 +40,7 @@ const ICONS = {
   wifi: require("../../assets/images/station_search/Examples/Wifi.png"),
   battery: require("../../assets/images/station_search/Examples/Battery.png"),
   bookmark: require("../../assets/images/station_search/Examples/Bookmark.png"),
+  marked: require("../../assets/images/home/marked.png"),
   home: require("../../assets/images/station_search/Examples/Home.png"),
   search: require("../../assets/images/station_search/Examples/Search.png"),
   user: require("../../assets/images/station_search/Examples/User.png"),
@@ -87,6 +89,9 @@ const StationSearchScreen = ({ currentScreen, onNavigate }: StationSearchProps):
     getStationSearchState().departureStation
   );
 
+  // 즐겨찾기 상태 (현재 로그인한 사용자의 즐겨찾기 목록)
+  const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>(getFavorites());
+
   // 정류장 이름으로 stationId 찾기
   const selectedStationId = useMemo(() => {
     if (!departureStationValue) return null;
@@ -98,6 +103,14 @@ const StationSearchScreen = ({ currentScreen, onNavigate }: StationSearchProps):
     if (selectedStationId === null) return null;
     return getStationBusInfo(selectedStationId);
   }, [selectedStationId]);
+
+  // 현재 선택된 출발 정류장이 즐겨찾기에 포함되어 있는지 여부
+  const is_current_station_favorited = useMemo(() => {
+    if (!departureStationValue) {
+      return false;
+    }
+    return favoriteItems.some((item) => item.type === "stop" && item.label === departureStationValue);
+  }, [favoriteItems, departureStationValue]);
 
   // 실시간 정류장 데이터 조회
   const [realtimeData, setRealtimeData] = useState<BusRealtimeData[]>([]);
@@ -144,9 +157,46 @@ const StationSearchScreen = ({ currentScreen, onNavigate }: StationSearchProps):
     return unsubscribe;
   }, []);
 
+  // 즐겨찾기 변경 구독
+  useEffect(() => {
+    const unsubscribe = subscribeFavorites((items) => {
+      setFavoriteItems(items);
+    });
+    return unsubscribe;
+  }, []);
+
   const handleDepartureChange = (value: string) => {
     setDepartureStationValue(value);
     setDepartureStation(value);
+  };
+
+  /**
+   * 현재 출발 정류장 즐겨찾기 토글 함수
+   * - 이미 즐겨찾기인 경우: 즐겨찾기에서 제거
+   * - 즐겨찾기가 아닌 경우: 즐겨찾기에 추가
+   */
+  const handleToggleFavoriteStation = async () => {
+    if (!departureStationValue) {
+      return;
+    }
+
+    try {
+      if (is_current_station_favorited) {
+        const existing = favoriteItems.find(
+          (item) => item.type === "stop" && item.label === departureStationValue
+        );
+        if (existing) {
+          await removeFavorite(existing.id);
+        }
+      } else {
+        await addFavorite({
+          label: departureStationValue,
+          type: "stop",
+        });
+      }
+    } catch (error) {
+      console.error("정류장 즐겨찾기 토글 중 오류가 발생했습니다.", error);
+    }
   };
 
   return (
@@ -156,14 +206,28 @@ const StationSearchScreen = ({ currentScreen, onNavigate }: StationSearchProps):
         <ScrollView contentContainerStyle={styles.scroll_content} showsVerticalScrollIndicator={false}>
           <View style={styles.header_row}>
             <DepartureField value={departureStationValue} onChange={handleDepartureChange} />
-            <TouchableOpacity
-              style={styles.reload_button}
-              activeOpacity={0.7}
-              onPress={handleRefresh}
-              disabled={isLoadingData}
-            >
-              <Image source={ICONS.reload} style={styles.reload_icon} resizeMode="contain" />
-            </TouchableOpacity>
+            <View style={styles.header_actions}>
+              <TouchableOpacity
+                style={styles.bookmark_button}
+                activeOpacity={0.7}
+                onPress={handleToggleFavoriteStation}
+                disabled={!departureStationValue}
+              >
+                <Image
+                  source={is_current_station_favorited ? ICONS.marked : ICONS.bookmark}
+                  style={styles.bookmark_icon}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.reload_button}
+                activeOpacity={0.7}
+                onPress={handleRefresh}
+                disabled={isLoadingData}
+              >
+                <Image source={ICONS.reload} style={styles.reload_icon} resizeMode="contain" />
+              </TouchableOpacity>
+            </View>
           </View>
           <TimeFilterTabs selectedTime={selectedTime} onTimeSelect={setSelectedTime} />
           {selectedStationId !== null && stationBusInfo && (
@@ -601,9 +665,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 0,
   },
+  header_actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: "auto",
+  },
+  bookmark_button: {
+    padding: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 4,
+  },
+  bookmark_icon: {
+    width: 26,
+    height: 26,
+  },
   reload_button: {
     padding: 8,
-    marginLeft: "auto",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -654,7 +732,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    minWidth: 200,
+    minWidth: 240,
   },
   departure_title: {
     fontSize: 17,
@@ -666,7 +744,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   departure_title_spacer: {
-    width: 24,
+    width: 10,
   },
   departure_station_name: {
     fontSize: 17,

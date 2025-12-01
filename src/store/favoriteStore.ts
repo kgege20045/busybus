@@ -144,6 +144,12 @@ export const addFavorite = async (item: FavoritePayload): Promise<FavoriteItem> 
   } else {
     // 일반 사용자: 백엔드 API 사용
     try {
+      // 이미 같은 label/type의 즐겨찾기가 있는 경우 중복 추가 방지
+      const existing = favorites.find((fav) => fav.label === item.label && fav.type === item.type);
+      if (existing) {
+        return existing;
+      }
+
       const newFavorite = await userDataApi.addFavorite(item.label, item.type);
       favorites = [newFavorite, ...favorites];
       notify();

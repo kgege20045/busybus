@@ -5,7 +5,7 @@ import Home from "./src/screen/home";
 import Search from "./src/screen/search";
 import Searching from "./src/screen/searching";
 import StationSearch from "./src/screen/station_search";
-import BusSearch from "./src/screen/bus_search_prediction";
+import BusSearch from "./src/screen/bus_search";
 import User from "./src/screen/user";
 import Login from "./src/screen/login";
 import SignUp from "./src/screen/signup";
@@ -30,7 +30,7 @@ const App = () => {
     return <StationSearch currentScreen={currentScreen} onNavigate={setCurrentScreen} />;
   }
 
-  if (currentScreen === "bus_search_prediction") {
+  if (currentScreen === "bus_search") {
     return <BusSearch currentScreen={currentScreen} onNavigate={setCurrentScreen} />;
   }
 

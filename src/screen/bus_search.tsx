@@ -20,6 +20,13 @@ import {
 } from "../store/busSearchStore";
 import { getRouteStops, RouteStop, getRouteIdsByRouteNm } from "../data";
 import { predictSeat, PredictSeatResponse } from "../api/bus";
+import {
+  addFavorite,
+  FavoriteItem,
+  getFavorites,
+  removeFavorite,
+  subscribeFavorites,
+} from "../store/favoriteStore";
 
 type BusSearchProps = {
   currentScreen: ScreenName;
@@ -29,6 +36,8 @@ type BusSearchProps = {
 const ICONS = {
   reload: require("../../assets/images/station_search/Examples/reload.png"),
   directionsBus: require("../../assets/images/bus_search/directions_bus.png"), // (실시간용 아이콘이지만 스타일 때문에 남겨둠)
+  bookmark: require("../../assets/images/bus_search/Bookmark.png"),
+  marked: require("../../assets/images/home/marked.png"),
 };
 
 type TimeSlot = "6:00" | "6:30" | "7:00" | "7:30" | "8:00" | "8:30" | "9:00";
@@ -108,6 +117,17 @@ const BusSearchPredictionScreen = ({
     new Map()
   );
   const [isLoadingPrediction, setIsLoadingPrediction] = useState(false);
+
+  // 즐겨찾기 상태 (현재 로그인한 사용자의 즐겨찾기 목록)
+  const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>(getFavorites());
+
+  // 현재 입력된 버스 번호가 즐겨찾기에 포함되어 있는지 여부
+  const is_current_bus_favorited = useMemo(() => {
+    if (!busNumber) {
+      return false;
+    }
+    return favoriteItems.some((item) => item.type === "bus" && item.label === busNumber);
+  }, [favoriteItems, busNumber]);
 
   /**
    * 시간 슬롯을 API 요청 형식으로 변환 (0~6 인덱스)
@@ -223,6 +243,14 @@ const BusSearchPredictionScreen = ({
     return unsubscribe;
   }, []);
 
+  // 즐겨찾기 변경 구독
+  useEffect(() => {
+    const unsubscribe = subscribeFavorites((items) => {
+      setFavoriteItems(items);
+    });
+    return unsubscribe;
+  }, []);
+
   // 버스 번호가 변경될 때마다 선택된 노선도 동기화
   useEffect(() => {
     if (busNumber) {
@@ -235,6 +263,35 @@ const BusSearchPredictionScreen = ({
     setBusSearchNumber(value);
   };
 
+  /**
+   * 현재 버스 번호 즐겨찾기 토글 함수
+   * - 이미 즐겨찾기인 경우: 즐겨찾기에서 제거
+   * - 즐겨찾기가 아닌 경우: 즐겨찾기에 추가
+   */
+  const handleToggleFavoriteBus = async () => {
+    if (!busNumber) {
+      return;
+    }
+
+    try {
+      if (is_current_bus_favorited) {
+        const existing = favoriteItems.find(
+          (item) => item.type === "bus" && item.label === busNumber
+        );
+        if (existing) {
+          await removeFavorite(existing.id);
+        }
+      } else {
+        await addFavorite({
+          label: busNumber,
+          type: "bus",
+        });
+      }
+    } catch (error) {
+      console.error("버스 즐겨찾기 토글 중 오류가 발생했습니다.", error);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe_area}>
       <StatusBar barStyle="dark-content" />
@@ -245,18 +302,32 @@ const BusSearchPredictionScreen = ({
               busNumber={busNumber}
               onBusNumberChange={handleBusNumberChange}
             />
-            <TouchableOpacity
-              style={styles.reload_button}
-              activeOpacity={0.7}
-              onPress={handleRefresh}
-              disabled={isLoadingPrediction}
-            >
-              <Image
-                source={ICONS.reload}
-                style={styles.reload_icon}
-                resizeMode="contain"
-              />
-            </TouchableOpacity>
+            <View style={styles.header_actions}>
+              <TouchableOpacity
+                style={styles.bookmark_button}
+                activeOpacity={0.7}
+                onPress={handleToggleFavoriteBus}
+                disabled={!busNumber}
+              >
+                <Image
+                  source={is_current_bus_favorited ? ICONS.marked : ICONS.bookmark}
+                  style={styles.bookmark_icon}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.reload_button}
+                activeOpacity={0.7}
+                onPress={handleRefresh}
+                disabled={isLoadingPrediction}
+              >
+                <Image
+                  source={ICONS.reload}
+                  style={styles.reload_icon}
+                  resizeMode="contain"
+                />
+              </TouchableOpacity>
+            </View>
           </View>
           <TimeFilterTabs
             selectedTime={selectedTime}
@@ -636,9 +707,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 0,
   },
+  header_actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: "auto",
+  },
+  bookmark_button: {
+    padding: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 4,
+  },
+  bookmark_icon: {
+    width: 26,
+    height: 26,
+  },
   reload_button: {
     padding: 8,
-    marginLeft: "auto",
     justifyContent: "center",
     alignItems: "center",
   },
