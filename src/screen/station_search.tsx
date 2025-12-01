@@ -383,9 +383,8 @@ const BusRouteCard = ({
   // 목적지 정류장 이름 (마지막 정류장)
   const destinationName = routeStops.length > 0 ? routeStops[routeStops.length - 1].stationName : "";
 
-  // 임시로 8개 정류장만 표시 (타임라인에 맞춤)
-  const displayStops = totalStops > 0 ? Math.min(8, totalStops) : 8;
-  const step = totalStops > 8 ? Math.floor(totalStops / displayStops) : 1;
+  // 모든 정류장을 표시 (order와 1:1 매핑)
+  const displayStops = totalStops;
 
   // 해당 버스 노선의 모든 정류장별 실시간 데이터 조회
   const [routeRealtimeData, setRouteRealtimeData] = useState<BusRealtimeData[]>([]);
@@ -526,52 +525,39 @@ const BusRouteCard = ({
 
   // 각 정류장의 혼잡도 데이터: 예측 데이터 > 기본값 순으로 우선순위 적용
   // routeid와 timeslot에 따라 예측 모델에서 받은 잔여좌석을 혼잡도로 변환하여 색깔로 표시
-  const congestionData: CongestionLevel[] = Array.from({ length: displayStops }).map((_, index) => {
-    // 실제 정류장 인덱스 계산 (step을 고려하여)
-    const actualIndex = step > 1 ? index * step : index;
-    const stop = routeStops[actualIndex];
-
-    if (stop) {
-      // 우선순위: 예측 데이터의 좌석 수를 혼잡도로 변환
-      // routeid와 timeslot에 따라 예측 모델에서 받은 잔여좌석 사용
-      // stop.order가 station_num과 일치한다고 가정
-      const predictedSeats = predictionData.get(stop.order);
-      if (predictedSeats !== undefined) {
-        // 예측된 좌석 수를 혼잡도 레벨로 변환 (색깔로 표시)
-        return getCongestionLevelFromSeats(predictedSeats);
-      }
+  // 모든 정류장을 order와 1:1로 매핑
+  const congestionData: CongestionLevel[] = routeStops.map((stop) => {
+    // 우선순위: 예측 데이터의 좌석 수를 혼잡도로 변환
+    // routeid와 timeslot에 따라 예측 모델에서 받은 잔여좌석 사용
+    // stop.order가 station_num과 일치한다고 가정
+    const predictedSeats = predictionData.get(stop.order);
+    if (predictedSeats !== undefined) {
+      // 예측된 좌석 수를 혼잡도 레벨로 변환 (색깔로 표시)
+      return getCongestionLevelFromSeats(predictedSeats);
     }
 
-    // 기본값: 인덱스에 따라 분산
-    const defaultLevels: CongestionLevel[] = ["empty", "empty", "normal", "normal", "crowded", "veryCrowded", "veryCrowded", "crowded"];
-    return defaultLevels[index] || "normal";
+    // 기본값: normal
+    return "normal";
   });
 
   // 버스 현재 위치: 실시간 API에서 받은 데이터로 표시
   // 각 정류장별로 vehid1이 있는지 확인 (bus_search_prediction.tsx와 동일한 방식)
   // vehid1이 있으면 해당 정류장에 현재 버스가 있음
-  // displayStops에 맞춰 각 정류장의 버스 위치 정보 계산
-  const busPositions = Array.from({ length: displayStops }).map((_, index) => {
-    // 실제 정류장 인덱스 계산 (step을 고려하여)
-    const actualIndex = step > 1 ? index * step : index;
-    const stop = routeStops[actualIndex];
-
-    if (stop) {
-      // 해당 정류장의 실시간 API 데이터 찾기
-      const stopRealtimeData = realtimeDataMap.get(stop.stationId);
-      // 실시간 API에서 받은 vehid1이 있고 빈 문자열이 아니면 현재 버스가 해당 정류장에 있음
-      const hasBus = !!(stopRealtimeData?.vehid1 && stopRealtimeData.vehid1.trim() !== "");
-      if (hasBus) {
-        console.log(`[BusRouteCard] 버스 ${busNum} 현재 위치 발견 (실시간 API):`, {
-          정류장_인덱스: index,
-          정류장_ID: stop.stationId,
-          정류장_이름: stop.stationName,
-          vehid1: stopRealtimeData.vehid1,
-        });
-      }
-      return hasBus;
+  // 모든 정류장을 order와 1:1로 매핑
+  const busPositions = routeStops.map((stop) => {
+    // 해당 정류장의 실시간 API 데이터 찾기
+    const stopRealtimeData = realtimeDataMap.get(stop.stationId);
+    // 실시간 API에서 받은 vehid1이 있고 빈 문자열이 아니면 현재 버스가 해당 정류장에 있음
+    const hasBus = !!(stopRealtimeData?.vehid1 && stopRealtimeData.vehid1.trim() !== "");
+    if (hasBus) {
+      console.log(`[BusRouteCard] 버스 ${busNum} 현재 위치 발견 (실시간 API):`, {
+        정류장_order: stop.order,
+        정류장_ID: stop.stationId,
+        정류장_이름: stop.stationName,
+        vehid1: stopRealtimeData.vehid1,
+      });
     }
-    return false;
+    return hasBus;
   });
 
   // 버스가 있는 첫 번째 정류장의 인덱스 찾기
@@ -588,11 +574,14 @@ const BusRouteCard = ({
   }
 
   // 내 위치를 타임라인 인덱스로 변환
+  // order와 1:1 매핑: routeStops에서 order가 myPosition과 일치하는 정류장의 인덱스를 찾음
   let myPositionIndex = -1;
-  if (myPosition > 0 && totalStops > 0) {
-    // 전체 정류장 중 내 위치가 어느 인덱스인지 계산
-    myPositionIndex = Math.floor(((myPosition - 1) / totalStops) * displayStops);
-    myPositionIndex = Math.min(displayStops - 1, Math.max(0, myPositionIndex));
+  if (myPosition > 0 && routeStops.length > 0) {
+    // routeStops에서 order가 myPosition과 일치하는 정류장의 인덱스 찾기
+    const foundIndex = routeStops.findIndex((stop) => stop.order === myPosition);
+    if (foundIndex >= 0) {
+      myPositionIndex = foundIndex;
+    }
   }
 
   return (
@@ -607,40 +596,47 @@ const BusRouteCard = ({
       <View style={styles.route_visualization}>
         {/* 혼잡도 표시 영역 */}
         <View style={styles.congestion_area}>
-          {/* 연결선 */}
-          <View style={styles.route_line} />
+          {/* 혼잡도 원들 - 가로 스크롤 가능 */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.congestion_dots_scroll_content}
+            style={styles.congestion_dots_scroll}
+          >
+            <View style={styles.congestion_dots_container}>
+              {/* 연결선 - 스크롤 가능한 영역의 전체 너비를 차지 */}
+              <View style={[styles.route_line, { width: routeStops.length * 40 }]} />
 
-          {/* 혼잡도 원들 */}
-          <View style={styles.congestion_dots_container}>
-            {Array.from({ length: displayStops }).map((_, index) => {
-              const congestionLevel = congestionData[index] || "normal";
-              const color = CONGESTION_COLORS[congestionLevel];
-              // 버스 위치: 해당 정류장에 vehid1이 있으면 버스가 있음
-              const isBusPosition = busPositions[index] === true;
-              const isMyPosition = index === myPositionIndex;
+              {routeStops.map((stop, index) => {
+                const congestionLevel = congestionData[index] || "normal";
+                const color = CONGESTION_COLORS[congestionLevel];
+                // 버스 위치: 해당 정류장에 vehid1이 있으면 버스가 있음
+                const isBusPosition = busPositions[index] === true;
+                const isMyPosition = index === myPositionIndex;
 
-              return (
-                <View key={index} style={styles.congestion_dot_wrapper}>
-                  {/* 혼잡도 원 */}
-                  <View style={[styles.congestion_dot, { backgroundColor: color }]} />
+                return (
+                  <View key={`${stop.stationId}-${stop.order}`} style={styles.congestion_dot_wrapper}>
+                    {/* 혼잡도 원 */}
+                    <View style={[styles.congestion_dot, { backgroundColor: color }]} />
 
-                  {/* 버스 위치 표시 */}
-                  {isBusPosition && (
-                    <View style={styles.bus_position_indicator}>
-                      <Image source={ICONS.directionsBus} style={styles.bus_position_icon} resizeMode="contain" />
-                    </View>
-                  )}
+                    {/* 버스 위치 표시 */}
+                    {isBusPosition && (
+                      <View style={styles.bus_position_indicator}>
+                        <Image source={ICONS.directionsBus} style={styles.bus_position_icon} resizeMode="contain" />
+                      </View>
+                    )}
 
-                  {/* 내 위치 표시 */}
-                  {isMyPosition && (
-                    <View style={styles.my_position_indicator}>
-                      <Image source={ICONS.mapPin} style={styles.my_position_icon} resizeMode="contain" />
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </View>
+                    {/* 내 위치 표시 */}
+                    {isMyPosition && (
+                      <View style={styles.my_position_indicator}>
+                        <Image source={ICONS.mapPin} style={styles.my_position_icon} resizeMode="contain" />
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </ScrollView>
         </View>
       </View>
     </View>
@@ -811,7 +807,6 @@ const styles = StyleSheet.create({
     paddingLeft: 17,
     paddingRight: 17,
     position: "relative",
-    overflow: "hidden",
   },
   bus_header: {
     flexDirection: "row",
@@ -847,19 +842,23 @@ const styles = StyleSheet.create({
   route_line: {
     position: "absolute",
     left: 0,
-    right: 0,
     height: 3,
     backgroundColor: COLOR.routeLine,
     top: "50%",
     marginTop: -1.5,
     zIndex: 1,
   },
+  congestion_dots_scroll: {
+    width: "100%",
+    height: "100%",
+  },
+  congestion_dots_scroll_content: {
+    paddingHorizontal: 8,
+  },
   congestion_dots_container: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     height: "100%",
-    paddingHorizontal: 8,
     position: "relative",
     zIndex: 2,
   },
@@ -867,7 +866,7 @@ const styles = StyleSheet.create({
     position: "relative",
     alignItems: "center",
     justifyContent: "center",
-    width: 24,
+    width: 40,
     height: 40,
     zIndex: 3,
   },
