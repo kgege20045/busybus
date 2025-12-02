@@ -67,83 +67,107 @@ def predict_seat(request):
         },
         status=200,
     )
-
 @csrf_exempt
 def bus_realtime(request):
-    """
-    공공데이터 API 기반 실시간 버스 정보 조회
-    프론트는 POST로 routeId와 stations 목록을 전달함.
-    {
-        "routeId": "234001736",
-        "stations": [
-            {"stationId": "234000384", "staOrder": 1},
-            {"stationId": "123000015", "staOrder": 2}
-        ]
-    }
-    이 정보를 기반으로 각 정류장의 실시간 데이터를 조회하여 반환.
-    """
+
     if request.method != "POST":
-        return JsonResponse({"error": "POST 요청만 허용됩니다."}, status=400)
+        return JsonResponse({"error": "POST only"}, status=400)
 
     try:
         body = json.loads(request.body.decode())
-        route_id = body.get("routeId")
-        stations = body.get("stations", [])
+    except:
+        return JsonResponse({"error": "invalid json body"}, status=400)
 
-        if not route_id or not stations:
-            return JsonResponse(
-                {"error": "routeId 또는 stations가 누락되었습니다."},
-                status=400,
-            )
+    route_id = body.get("routeId")
+    stations = body.get("stations", [])
 
-        SERVICE_KEY = "8a35df3c26378efa55c12bae453a2e5cf98a26abfbed8392b0b4095edc87b72d"
-        URL = "https://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalItemv2"
+    if not route_id or not stations:
+        return JsonResponse({"error": "missing params"}, status=400)
 
-        def call_api(station_id, sta_order):
-            """공공데이터 API 1회 호출"""
-            params = {
-                "serviceKey": SERVICE_KEY,
-                "routeId": route_id,
-                "stationId": station_id,
-                "staOrder": sta_order,
-                "format": "json",
-            }
-            r = requests.get(URL, params=params, timeout=5)
+    SERVICE_KEY = "52f50a9dca9673918e8d195dab87644394bf9c85a814c758daedb44634df54c6"
+    URL = "https://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalItemv2"
+
+    def call_api(station_id, sta_order):
+        params = {
+            "serviceKey": SERVICE_KEY,
+            "routeId": route_id,
+            "stationId": station_id,
+            "staOrder": sta_order,
+            "format": "json",
+        }
+        r = requests.get(URL, params=params, timeout=5)
+
+        try:
             return r.json()
+        except:
+            print("JSON decode 실패:", r.text)
+            return None
 
-        results = []
+    vehicle_map = {}
 
-        # 여러 정류장 각각 호출
-        for s in stations:
-            station_id = s["stationId"]
-            sta_order = s["staOrder"]
+    for s in stations:
+        station_id = s["stationId"]
+        sta_order = s["staOrder"]
 
-            api_res = call_api(station_id, sta_order)
+        api_res = call_api(station_id, sta_order)
+        if not api_res:
+            continue
 
-            # 공공데이터 구조 파싱
-            raw_item = (
-                api_res.get("response", {})
-                      .get("msgBody", {})
-                      .get("busArrivalItem", None)
-            )
-
-            results.append({
-                "stationId": station_id,
-                "staOrder": sta_order,
-                "raw": raw_item,
-            })
-
-        return JsonResponse(
-            {"routeId": route_id, "results": results},
-            safe=False
+        raw = (
+            api_res.get("response", {})
+                  .get("msgBody", {})
+                  .get("busArrivalItem", None)
         )
+        if not raw:
+            continue
 
-    except Exception as e:
-        return JsonResponse(
-            {"error": f"서버 오류: {str(e)}"},
-            status=500,
-        )
+        real_station_order = sta_order * 8
 
+        for n in (1, 2):
+
+            veh_id = raw.get(f"vehid{n}") or raw.get(f"vehId{n}")
+            if not veh_id:
+                continue
+
+            # 🔥 대문자/소문자 locationNo 모두 처리
+            location_no = raw.get(f"locationno{n}") or raw.get(f"locationNo{n}")
+            if location_no in (None, ""):
+                continue
+
+            try:
+                location_no = int(location_no)
+            except:
+                continue
+
+            remain_raw = raw.get(f"remainseatcnt{n}") or raw.get(f"remainSeatCnt{n}")
+            try:
+                remain = int(remain_raw) if remain_raw not in (None, "") else None
+            except:
+                remain = None
+
+            bus_station_order = real_station_order - location_no
+            if bus_station_order <= 0:
+                continue
+
+            exist = vehicle_map.get(str(veh_id))
+            existing_loc = exist["locationno"] if exist else None
+
+            # 🔥 더 앞에 있는 버스가 우선 (location smaller)
+            if exist is None or location_no < existing_loc:
+                vehicle_map[str(veh_id)] = {
+                    "vehId": str(veh_id),
+                    "locationno": location_no,
+                    "busStationOrder": bus_station_order,
+                    "remainSeat": remain,
+                }
+
+    merged = list(vehicle_map.values())
+    merged.sort(key=lambda x: x["busStationOrder"])
+
+    return JsonResponse({
+        "routeId": route_id,
+        "buses": merged
+    })
 
 @csrf_exempt
 @require_GET

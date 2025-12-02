@@ -68,8 +68,7 @@ def predict_remaining_seats(routeid: str, slot_index: int) -> List[Dict]:
 
     df_pred = pd.DataFrame(rows)
     X = df_pred[feature_cols]
-    
-    print(X) #디버깅 용
+
     # 5) 모델 예측
     df_pred["y_pred"] = model.predict(X)
 
@@ -81,7 +80,7 @@ def predict_remaining_seats(routeid: str, slot_index: int) -> List[Dict]:
                 "routeid": str(row["routeid"]),          # 문자열 유지
                 "station_num": int(row["station_num"]),
                 "slot_index": slot_index,
-                "remainseat_pred": float(row["y_pred"]),
+                "remainseat_pred": round(row["y_pred"]),
             }
         )
 
