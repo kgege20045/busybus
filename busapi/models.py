@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 
 ##DB 연결
 class bus_arrival_past(models.Model):
-    routeid = models.IntegerField()
+    routeid = models.CharField(max_length=20)
     timestamp = models.IntegerField()
     remainseatcnt1 = models.IntegerField()
     vehid1 = models.IntegerField()

@@ -38,7 +38,7 @@ def predict_seat(request):
         )
 
     try:
-        routeid_int = int(routeid)
+        routeid_str = routeid
         select_time_int = int(select_time)
     except ValueError:
         return JsonResponse(
@@ -47,7 +47,7 @@ def predict_seat(request):
         )
 
     try:
-        predictions = predict_remaining_seats(routeid_int, select_time_int)
+        predictions = predict_remaining_seats(routeid_str, select_time_int)
     except Exception as e:
         import traceback
         print('error during prediction')
@@ -61,7 +61,7 @@ def predict_seat(request):
     # PredictSeatResponse: { routeid, select_time, predictions, error? }
     return JsonResponse(
         {
-            "routeid": routeid_int,
+            "routeid": routeid_str,
             "select_time": select_time_int,
             "predictions": predictions,
         },
