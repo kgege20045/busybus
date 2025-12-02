@@ -5,6 +5,8 @@ from django.views.decorators.csrf import csrf_exempt
 import pandas as pd
 from .models import bus_arrival_past
 from django.contrib.auth.decorators import user_passes_test
+import requests
+import json
 
 try:
     from .ml_train import train_model_and_save
@@ -66,88 +68,76 @@ def predict_seat(request):
         status=200,
     )
 
-
-
 @csrf_exempt
-@require_GET
 def bus_realtime(request):
     """
-    버스 노선별 실시간 버스 위치 조회
-    - 쿼리 파라미터: routeid, service_date, time_slot
-    - 반환: 해당 노선의 현재 버스 위치 정보 (vehid1, stationid, station_num 등)
-    - 잔여좌석 정보는 예측 모델에서 따로 받으므로 여기서는 제외
-    - routeid에 따라 현재 버스의 위치를 실시간 API에서 받아서 반환
+    공공데이터 API 기반 실시간 버스 정보 조회
+    프론트는 POST로 routeId와 stations 목록을 전달함.
+    {
+        "routeId": "234001736",
+        "stations": [
+            {"stationId": "234000384", "staOrder": 1},
+            {"stationId": "123000015", "staOrder": 2}
+        ]
+    }
+    이 정보를 기반으로 각 정류장의 실시간 데이터를 조회하여 반환.
     """
-    routeid = request.GET.get('routeid')
-    service_date = request.GET.get('service_date')
-    time_slot = request.GET.get('time_slot')
-
-    if not routeid or not service_date or not time_slot:
-        return JsonResponse(
-            {"error": "routeid, service_date, time_slot 파라미터가 필요합니다."},
-            status=400,
-        )
+    if request.method != "POST":
+        return JsonResponse({"error": "POST 요청만 허용됩니다."}, status=400)
 
     try:
-        # routeid를 정수로 변환
-        try:
-            routeid_int = int(routeid)
-        except ValueError:
+        body = json.loads(request.body.decode())
+        route_id = body.get("routeId")
+        stations = body.get("stations", [])
+
+        if not route_id or not stations:
             return JsonResponse(
-                {"error": "routeid는 정수여야 합니다."},
+                {"error": "routeId 또는 stations가 누락되었습니다."},
                 status=400,
             )
 
-        # routeid에 따라 실시간 버스 위치 데이터 조회
-        # 현재 버스의 위치를 실시간 API에서 받아서 반환
-        # TODO: 실제 실시간 버스 위치 API를 호출하여 현재 버스 위치를 가져와야 함
-        # 현재는 과거 데이터에서 최신 데이터를 조회하는 방식 (실시간 API 연동 필요)
-        from django.db.models import Max
+        SERVICE_KEY = "8a35df3c26378efa55c12bae453a2e5cf98a26abfbed8392b0b4095edc87b72d"
+        URL = "https://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalItemv2"
 
-        # routeid로 필터링하여 최근 데이터 조회
-        # 각 station_num별로 가장 최근 timestamp를 가진 데이터만 가져오기
-        # (실제 실시간 API에서는 현재 버스 위치를 직접 받아옴)
-        latest_records = (
-            bus_arrival_past.objects
-            .filter(routeid=routeid_int)
-            .values('station_num')
-            .annotate(latest_timestamp=Max('timestamp'))
-        )
+        def call_api(station_id, sta_order):
+            """공공데이터 API 1회 호출"""
+            params = {
+                "serviceKey": SERVICE_KEY,
+                "routeId": route_id,
+                "stationId": station_id,
+                "staOrder": sta_order,
+                "format": "json",
+            }
+            r = requests.get(URL, params=params, timeout=5)
+            return r.json()
 
-        # 각 정류장의 최신 데이터 조회 (실시간 API 연동 시 이 부분 수정 필요)
-        data = []
-        for record in latest_records:
-            station_num = record['station_num']
-            latest_timestamp = record['latest_timestamp']
+        results = []
 
-            # 해당 정류장의 최신 데이터 가져오기
-            latest_data = (
-                bus_arrival_past.objects
-                .filter(
-                    routeid=routeid_int,
-                    station_num=station_num,
-                    timestamp=latest_timestamp
-                )
-                .first()
+        # 여러 정류장 각각 호출
+        for s in stations:
+            station_id = s["stationId"]
+            sta_order = s["staOrder"]
+
+            api_res = call_api(station_id, sta_order)
+
+            # 공공데이터 구조 파싱
+            raw_item = (
+                api_res.get("response", {})
+                      .get("msgBody", {})
+                      .get("busArrivalItem", None)
             )
 
-            if latest_data:
-                # 실시간 API에서 받은 현재 버스 위치 정보만 반환
-                # vehid1: 버스 ID (현재 버스 위치 표시용)
-                # stationid: 정류장 ID (정류장 매핑용)
-                # 잔여좌석 정보는 예측 모델에서 따로 받으므로 제외
-                data.append({
-                    "service_date": service_date,
-                    "arrival_time": service_date,  # 실제 arrival_time이 없으므로 service_date 사용
-                    "vehid1": str(latest_data.vehid1),  # 버스 ID (현재 버스 위치 표시용)
-                    "station_num": str(latest_data.station_num),  # 정류장 번호
-                    "routeid": str(routeid_int),  # 노선 ID
-                    "routename": str(routeid_int),  # routename은 별도 조회 필요 시 수정
-                    "stationid": f"234{latest_data.station_num:06d}",  # stationid 생성 (실제 DB에 있으면 수정 필요)
-                    "crowded_level": 1,  # 기본값 (실제 데이터가 있으면 수정 필요)
-                })
+            results.append({
+                "stationId": station_id,
+                "staOrder": sta_order,
+                "raw": raw_item,
+            })
 
-        return JsonResponse(data, status=200, safe=False)
+        return JsonResponse(
+            {"routeId": route_id, "results": results},
+            safe=False
+        )
+
     except Exception as e:
         return JsonResponse(
             {"error": f"서버 오류: {str(e)}"},
