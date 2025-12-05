@@ -919,7 +919,7 @@ const styles = StyleSheet.create({
   },
     bus_seat_text: {
     fontSize: 10,
-    color: COLOR.blue,
+    color: "#000000", // 검정색으로 변경
     marginTop: 1,
   },
 

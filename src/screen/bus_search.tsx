@@ -750,9 +750,8 @@ const BusSeatsVisualization = ({
                                 resizeMode="contain"
                               />
                               {bus.remainSeat != null && (
-                                <Text style={styles.bus_seat_text}>
-                                  {bus.remainSeat}
-                                  {"\n석"}
+                                <Text style={styles.bus_seat_text} numberOfLines={1}>
+                                  {bus.remainSeat}석
                                 </Text>
                               )}
                             </View>
@@ -1005,20 +1004,22 @@ const styles = StyleSheet.create({
   bus_overlay_item: {
     alignItems: "center",
     marginBottom: 2,
+    minWidth: 30, // "33석" 같은 텍스트가 잘리지 않도록 최소 너비 확보
   },
   bus_icon: {
-    width: 14,
-    height: 14,
+    width: 16,
+    height: 16,
     tintColor: "#000000", // 검정색으로 설정
   },
   bus_seat_text: {
-    fontSize: 8,
+    fontSize: 10,
     color: "#000000",
     marginTop: 1,
     textAlign: "center",
-    //  줄바꿈 되는 거 -> 숫자가 최대 4글자 정도까지 들어가도 줄바꿈 레이아웃이 깨지지 않도록 최소 너비 확보
-    minWidth: 24,
+    flexShrink: 0, // 텍스트가 줄어들지 않도록
+    includeFontPadding: false, // 폰트 패딩 제거로 정확한 크기 계산
   },
+
   station_text: {
     flex: 1,
     fontSize: 13,
