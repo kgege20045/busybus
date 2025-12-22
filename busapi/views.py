@@ -15,10 +15,6 @@ from pathlib import Path
 # SERVICE_KEY = "52f50a9dca9673918e8d195dab87644394bf9c85a814c758daedb44634df54c6"
 SERVICE_KEY = "1cfef036ae8826960c98fdb06e237c675fcbbc27a26106b8865eec77ed9f1cf8"
 
-
-USE_FAKE_REALTIME = False  # 🔥 개발용 플래그 (실제 운영 시 False 로 바꾸거나 이 블록 삭제)
-
-
 # ... 기존 import들 위/아래 아무 데나 괜찮지만, 함수 정의보다 위에
 DATA_DIR = Path(settings.BASE_DIR) / "busapi" / "data"
 
@@ -77,72 +73,8 @@ def get_local_routes_via_station(stationid: str):
 
     return results
 
-
-# 🔥 BusSearch / StationSearch 에서 쓸 "가짜 노선 실시간 데이터"
-#   → 네가 위에 붙여준 긴 JSON 중 일부만 써도 되고, 통째로 써도 됨
-FAKE_ROUTE_234001736 = [
-    {
-        "service_date": "2025-12-03",
-        "arrival_time": "2025-12-03 19:24:45.979",
-        "vehid1": "",
-        "station_num": "1",
-        "remainseat_at_arrival": None,
-        "routeid": "234001736",
-        "routename": "3302",
-        "stationid": "234001276",
-        "crowded_level": 2,
-    },
-    {
-        "service_date": "2025-12-03",
-        "arrival_time": "2025-12-03 19:24:50.214",
-        "vehid1": "230010044",  # 🔥 여기부터 실제 버스
-        "station_num": "3",
-        "remainseat_at_arrival": 44,
-        "routeid": "234001736",
-        "routename": "3302",
-        "stationid": "234001270",
-        "crowded_level": 1,
-    },
-    {
-        "service_date": "2025-12-03",
-        "arrival_time": "2025-12-03 19:26:07.599",
-        "vehid1": "230010044",
-        "station_num": "8",
-        "remainseat_at_arrival": 44,
-        "routeid": "234001736",
-        "routename": "3302",
-        "stationid": "234000384",
-        "crowded_level": 1,
-    },
-    {
-        "service_date": "2025-12-03",
-        "arrival_time": "2025-12-03 19:26:22.693",
-        "vehid1": "230010045",
-        "station_num": "31",
-        "remainseat_at_arrival": 37,
-        "routeid": "234001736",
-        "routename": "3302",
-        "stationid": "123000008",
-        "crowded_level": 1,
-    },
-    {
-        "service_date": "2025-12-03",
-        "arrival_time": "2025-12-03 19:26:38.958",
-        "vehid1": "230010042",
-        "station_num": "45",
-        "remainseat_at_arrival": 21,
-        "routeid": "234001736",
-        "routename": "3302",
-        "stationid": "234001200",
-        "crowded_level": 1,
-    },
-    # ... 필요하면 네가 붙여준 JSON에서 더 복사해서 추가
-]
-
-
-
 # -----------------------------
-#  ML 관련 (그대로 유지)
+#  ML 관련
 # -----------------------------
 try:
     from .ml_train import train_model_and_save
